@@ -1,0 +1,4 @@
+#!/usr/bin/sh
+set -eu -o pipefail
+
+GOPATH=$PWD/gopath gcloud app deploy

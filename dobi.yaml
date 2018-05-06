@@ -1,0 +1,38 @@
+meta:
+  project: govanity 
+
+mount=source:
+  bind: .
+  path: /go/src/govanity
+
+mount=depsources:
+ bind: ./.depsources
+ path: /go/pkg/dep/sources
+
+image=builder:
+  image: vanity-dev
+  context: .
+  steps: |
+    FROM    golang:1.10-alpine
+    RUN     apk add -U curl git bash
+
+    ARG     DEP_TAG=v0.4.1
+    RUN     go get -d github.com/golang/dep/cmd/dep && \
+            cd /go/src/github.com/golang/dep && \
+            git checkout -q "$DEP_TAG" && \
+            go build -v -o /usr/bin/dep ./cmd/dep && \
+            rm -rf /go/src/* /go/pkg/* /go/bin/*
+
+    ENV     CGO_ENABLED=0 PS1='# '
+    WORKDIR /go/src/govanity
+
+job=shell:
+  use: builder
+  mounts: [source, depsources]
+  interactive: true
+  command: sh
+
+job=deps:
+  use: builder
+  mounts: [source, depsources]
+  command: dep ensure
