@@ -16,3 +16,6 @@ Deploy the app:
 ```
 $ dep ensure && ./deploy
 ```
+
+---
+gotestyourself avatar Photo by Kate Trysh on Unsplash
