@@ -1,4 +1,0 @@
-#!/usr/bin/sh
-set -eu -o pipefail
-
-gcloud app deploy

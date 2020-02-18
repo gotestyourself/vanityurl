@@ -14,7 +14,8 @@ $ gcloud components install app-engine-go
 Deploy the app:
 
 ```
-$ dep ensure && ./deploy
+$ go mod download
+$ gcloud app deploy --project gotestyourself-vanity
 ```
 
 ---
