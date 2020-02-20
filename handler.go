@@ -20,10 +20,11 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type handler struct {
@@ -33,10 +34,11 @@ type handler struct {
 }
 
 type pathConfig struct {
-	path    string
-	repo    string
-	display string
-	vcs     string
+	path           string
+	repo           string
+	display        string
+	vcs            string
+	defaultVersion string
 }
 
 func newHandler(config []byte) (*handler, error) {
@@ -44,9 +46,10 @@ func newHandler(config []byte) (*handler, error) {
 		Host     string `yaml:"host,omitempty"`
 		CacheAge *int64 `yaml:"cache_max_age,omitempty"`
 		Paths    map[string]struct {
-			Repo    string `yaml:"repo,omitempty"`
-			Display string `yaml:"display,omitempty"`
-			VCS     string `yaml:"vcs,omitempty"`
+			Repo           string `yaml:"repo,omitempty"`
+			Display        string `yaml:"display,omitempty"`
+			VCS            string `yaml:"vcs,omitempty"`
+			DefaultVersion string `yaml:"default_version"`
 		} `yaml:"paths,omitempty"`
 	}
 	if err := yaml.Unmarshal(config, &parsed); err != nil {
@@ -63,10 +66,11 @@ func newHandler(config []byte) (*handler, error) {
 	h.cacheControl = fmt.Sprintf("public, max-age=%d", cacheAge)
 	for path, e := range parsed.Paths {
 		pc := pathConfig{
-			path:    path,
-			repo:    e.Repo,
-			display: e.Display,
-			vcs:     e.VCS,
+			path:           path,
+			repo:           e.Repo,
+			display:        e.Display,
+			vcs:            e.VCS,
+			defaultVersion: e.DefaultVersion,
 		}
 		switch {
 		case e.Display != "":
@@ -114,7 +118,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		VCS     string
 	}{
 		Import:  h.Host(r) + strings.TrimSuffix(pc.path, "/"),
-		Subpath: subpath,
+		Subpath: withDefaultVersion(pc.defaultVersion, subpath),
 		Repo:    pc.repo,
 		Display: pc.display,
 		VCS:     pc.vcs,
@@ -122,6 +126,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot render the page", http.StatusInternalServerError)
 	}
 }
+
+func withDefaultVersion(version string, path string) string {
+	if version == "" || versionRegexp.MatchString(path) {
+		return path
+	}
+	return version + "/" + path
+}
+
+var versionRegexp = regexp.MustCompile(`^v\d`)
 
 func (h *handler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	host := h.Host(r)

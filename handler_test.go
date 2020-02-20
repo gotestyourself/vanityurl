@@ -21,6 +21,8 @@ import (
 	"net/http/httptest"
 	"sort"
 	"testing"
+
+	"gotest.tools/v3/assert"
 )
 
 func TestHandler(t *testing.T) {
@@ -31,6 +33,7 @@ func TestHandler(t *testing.T) {
 
 		goImport string
 		goSource string
+		redirect string
 	}{
 		{
 			name: "explicit display",
@@ -97,38 +100,79 @@ func TestHandler(t *testing.T) {
 			goImport: "example.com/portmidi git https://github.com/rakyll/portmidi",
 			goSource: "example.com/portmidi https://github.com/rakyll/portmidi _ _",
 		},
+		{
+			name:     "gotest.tools",
+			config:   gotestToolsConfig,
+			path:     "/",
+			goImport: "gotest.tools git https://github.com/gotestyourself/gotest.tools",
+			goSource: "gotest.tools https://github.com/gotestyourself/gotest.tools https://github.com/gotestyourself/gotest.tools/tree/master{/dir} https://github.com/gotestyourself/gotest.tools/blob/master{/dir}/{file}#L{line}",
+			redirect: "https://pkg.go.dev/gotest.tools/v3/",
+		},
+		{
+			name:     "gotest.tools/gotestsum",
+			config:   gotestToolsConfig,
+			path:     "/gotestsum",
+			goImport: "gotest.tools/gotestsum git https://github.com/gotestyourself/gotestsum",
+			goSource: "gotest.tools/gotestsum https://github.com/gotestyourself/gotestsum https://github.com/gotestyourself/gotestsum/tree/master{/dir} https://github.com/gotestyourself/gotestsum/blob/master{/dir}/{file}#L{line}",
+			redirect: "https://pkg.go.dev/gotest.tools/gotestsum/",
+		},
+		{
+			name:     "gotest.tools/assert",
+			config:   gotestToolsConfig,
+			path:     "/assert",
+			goImport: "gotest.tools git https://github.com/gotestyourself/gotest.tools",
+			goSource: "gotest.tools https://github.com/gotestyourself/gotest.tools https://github.com/gotestyourself/gotest.tools/tree/master{/dir} https://github.com/gotestyourself/gotest.tools/blob/master{/dir}/{file}#L{line}",
+			redirect: "https://pkg.go.dev/gotest.tools/v3/assert",
+		},
+		{
+			name:     "gotest.tools/v5/assert",
+			config:   gotestToolsConfig,
+			path:     "/v5/assert",
+			goImport: "gotest.tools git https://github.com/gotestyourself/gotest.tools",
+			goSource: "gotest.tools https://github.com/gotestyourself/gotest.tools https://github.com/gotestyourself/gotest.tools/tree/master{/dir} https://github.com/gotestyourself/gotest.tools/blob/master{/dir}/{file}#L{line}",
+			redirect: "https://pkg.go.dev/gotest.tools/v5/assert",
+		},
 	}
-	for _, test := range tests {
-		h, err := newHandler([]byte(test.config))
-		if err != nil {
-			t.Errorf("%s: newHandler: %v", test.name, err)
-			continue
-		}
-		s := httptest.NewServer(h)
-		resp, err := http.Get(s.URL + test.path)
-		if err != nil {
-			s.Close()
-			t.Errorf("%s: http.Get: %v", test.name, err)
-			continue
-		}
-		data, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		s.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("%s: status code = %s; want 200 OK", test.name, resp.Status)
-		}
-		if err != nil {
-			t.Errorf("%s: ioutil.ReadAll: %v", test.name, err)
-			continue
-		}
-		if got := findMeta(data, "go-import"); got != test.goImport {
-			t.Errorf("%s: meta go-import = %q; want %q", test.name, got, test.goImport)
-		}
-		if got := findMeta(data, "go-source"); got != test.goSource {
-			t.Errorf("%s: meta go-source = %q; want %q", test.name, got, test.goSource)
-		}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, err := newHandler([]byte(tc.config))
+			assert.NilError(t, err)
+
+			s := httptest.NewServer(h)
+			defer s.Close()
+
+			resp, err := http.Get(s.URL + tc.path)
+			assert.NilError(t, err)
+
+			data, err := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			assert.NilError(t, err)
+			assert.Equal(t, resp.StatusCode, http.StatusOK)
+
+			goImport := findMeta(data, "go-import")
+			assert.Equal(t, goImport, tc.goImport, "go import")
+
+			goSource := findMeta(data, "go-source")
+			assert.Equal(t, goSource, tc.goSource, "go source")
+
+			if tc.redirect != "" {
+				redirect := findRedirect(data)
+				assert.Equal(t, redirect, tc.redirect, "redirect")
+			}
+		})
 	}
 }
+
+var gotestToolsConfig = `
+host: gotest.tools
+paths:
+  /:
+    repo: https://github.com/gotestyourself/gotest.tools
+    default_version: v3
+  /gotestsum:
+    repo: https://github.com/gotestyourself/gotestsum
+`
 
 func TestBadConfigs(t *testing.T) {
 	badConfigs := []string{
@@ -157,6 +201,20 @@ func findMeta(data []byte, name string) string {
 	sep = append(sep, `<meta name="`...)
 	sep = append(sep, name...)
 	sep = append(sep, `" content="`...)
+	i := bytes.Index(data, sep)
+	if i == -1 {
+		return ""
+	}
+	content := data[i+len(sep):]
+	j := bytes.IndexByte(content, '"')
+	if j == -1 {
+		return ""
+	}
+	return string(content[:j])
+}
+
+func findRedirect(data []byte) string {
+	sep := []byte(`<meta http-equiv="refresh" content="0; url=`)
 	i := bytes.Index(data, sep)
 	if i == -1 {
 		return ""
@@ -237,10 +295,10 @@ func TestPathConfigSetFind(t *testing.T) {
 			want:  "/y",
 		},
 		{
-			paths: []string{"/example/helloworld", "/", "/y", "/foo"},
-			query: "/x/y/",
-			want:  "/",
-			subpath:  "x/y/",
+			paths:   []string{"/example/helloworld", "/", "/y", "/foo"},
+			query:   "/x/y/",
+			want:    "/",
+			subpath: "x/y/",
 		},
 		{
 			paths: []string{"/example/helloworld", "/y", "/foo"},

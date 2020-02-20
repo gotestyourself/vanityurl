@@ -3,5 +3,6 @@ host: gotest.tools
 paths:
   /:
     repo: https://github.com/gotestyourself/gotest.tools
+    default_version: v3
   /gotestsum:
     repo: https://github.com/gotestyourself/gotestsum
