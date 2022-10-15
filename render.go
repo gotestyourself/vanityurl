@@ -67,9 +67,10 @@ func (d description) Path() string {
 }
 
 var repos = map[string]string{
-	"gotest.tools/gotestsum": "https://github.com/gotestyourself/gotestsum",
-	"gotest.tools/v3":        "https://github.com/gotestyourself/gotest.tools",
-	"gotest.tools":           "https://github.com/gotestyourself/gotest.tools",
+	"gotest.tools/gotestsum":  "https://github.com/gotestyourself/gotestsum",
+	"gotest.tools/v3":         "https://github.com/gotestyourself/gotest.tools",
+	"gotest.tools":            "https://github.com/gotestyourself/gotest.tools",
+	"gotest.tools/x/generics": "https://github.com/gotestyourself/gotest.tools",
 }
 
 var tmpl = template.Must(template.New("vanity").Parse(`
